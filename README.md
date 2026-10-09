@@ -11,6 +11,7 @@
 - 将当前任务沉淀为带稳定 `work_id` 的工作记录
 - 从受管工作记录和明确补充材料生成日报
 - 从受管日报和明确补充材料生成 ISO 周报
+- 将工作记录逐级压缩为按目标组织的日报和周报，避免机械拼接和流水账
 - 区分事实、推断、建议与待确认信息
 - 用来源指纹支持可追溯更新和重复运行
 - 将 AI 托管区域与人工编辑区域分开，避免覆盖人工内容
@@ -95,7 +96,8 @@ ai-work-summary-skill/
     |-- agents/
     |   `-- openai.yaml
     |-- references/
-    |   `-- protocol.md
+    |   |-- protocol.md
+    |   `-- report-writing.md
     `-- scripts/
         `-- work_summary_io.py
 ```

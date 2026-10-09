@@ -63,6 +63,7 @@ When evidence is missing, preserve the work as non-complete and state what is mi
 
 ### Generate or update a daily report
 
+- Before drafting the report, read [references/report-writing.md](references/report-writing.md) and follow it for content selection, compression, organization, and reader-facing expression.
 - Read only managed records for the requested date, the existing managed daily report, and explicitly supplied additions.
 - Run the helper's `fingerprint-sources` command over all selected source records before generation. Pass each user-explicit supplemental file with `--supplement-file`. For supplemental text supplied directly in the current task, place its normalized text in a temporary file and pass that file the same way. Stop on invalid managed documents or conflicting duplicate `work_id` values. Skip generation and writing only when the combined fingerprint and every system property except `generated_at` match the existing report.
 - Aggregate by work goal, not by file, chat, or commit. Keep uncertain goals separate unless the user confirms a merge.
@@ -71,6 +72,7 @@ When evidence is missing, preserve the work as non-complete and state what is mi
 
 ### Generate or update a weekly report
 
+- Before drafting the report, read [references/report-writing.md](references/report-writing.md) and follow it for content selection, compression, organization, and reader-facing expression.
 - Read the period's managed daily reports, their directly related work records, existing human region, and explicitly supplied additions.
 - Run `fingerprint-sources` over every selected daily report and directly related work record, adding each user-explicit supplemental file or temporary normalized supplemental-text file with `--supplement-file`. Stop on invalid managed documents or conflicting duplicate `work_id` values. Skip generation and writing only when the combined fingerprint and every system property except `generated_at` match the existing report.
 - Use Monday through Sunday and the ISO week ID. Store a cross-month week under the month containing its Monday.
