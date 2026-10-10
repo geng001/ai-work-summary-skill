@@ -13,7 +13,7 @@ import sys
 import tempfile
 import time
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 
 
@@ -41,9 +41,31 @@ WORK_TYPES = {
     "requirements", "development", "documentation", "presentation",
     "environment", "research", "collaboration", "support",
 }
+DOCUMENT_TYPE_LABELS = {
+    "work_record": "工作记录",
+    "daily_report": "工作日报",
+    "weekly_report": "工作周报",
+}
+STATUS_LABELS = {
+    "COMPLETED": "已完成",
+    "IN_PROGRESS": "进行中",
+    "BLOCKED": "已阻塞",
+    "PENDING_CONFIRMATION": "待确认",
+    "UNVERIFIED": "未验证",
+}
+WORK_TYPE_LABELS = {
+    "requirements": "需求分析",
+    "development": "开发实现",
+    "documentation": "文档整理",
+    "presentation": "演示与汇报",
+    "environment": "环境配置",
+    "research": "调研分析",
+    "collaboration": "协作沟通",
+    "support": "支持与排障",
+}
 SCHEMAS = {
     "work_record": {
-        "schema_version", "document_type", "work_id", "date", "time", "project",
+        "schema_version", "document_type", "work_id", "date", "project",
         "work_type", "source_ai", "source_ref", "status", "created_at", "updated_at",
     },
     "daily_report": {
@@ -54,6 +76,9 @@ SCHEMAS = {
         "schema_version", "document_type", "week_id", "period_start", "period_end",
         "source_daily", "source_work_ids", "source_fingerprint", "generated_at",
     },
+}
+OPTIONAL_FIELDS = {
+    "work_record": {"time"},
 }
 LIST_FIELDS = {"source_work_ids", "source_daily"}
 PLAIN_SCALAR_FIELDS = {
@@ -229,6 +254,79 @@ def validate_timestamp(value: str, key: str) -> None:
         raise SafetyError(f"YAML property {key} must include a timezone")
 
 
+def display_timestamp(value: str) -> str:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    beijing = parsed.astimezone(timezone(timedelta(hours=8)))
+    return beijing.strftime("%Y-%m-%d %H:%M:%S（北京时间）")
+
+
+def display_record_time(value: str) -> str:
+    parsed = datetime.strptime(value, "%H:%M:%S%z")
+    return parsed.strftime("%H:%M:%S（北京时间）")
+
+
+def summary_block(managed: str, heading: str) -> list[str]:
+    lines = [line.strip() for line in managed.splitlines()]
+    if lines.count(heading) != 1:
+        raise SafetyError(f"AI-managed content must contain exactly one {heading}")
+    start = lines.index(heading) + 1
+    end = next((index for index in range(start, len(lines)) if lines[index].startswith("## ")), len(lines))
+    return [line for line in lines[start:end] if line]
+
+
+def validate_readable_managed_content(data: dict[str, object], managed: str) -> None:
+    """Keep the Chinese display layer synchronized with machine frontmatter."""
+    lines = [line.strip() for line in managed.splitlines() if line.strip()]
+    if not lines or not lines[0].startswith("# ") or lines[0].startswith("## "):
+        raise SafetyError("AI-managed content must start with one human-readable H1 title")
+    title = lines[0][2:].strip()
+    if not title:
+        raise SafetyError("AI-managed H1 title must not be empty")
+
+    document_type = str(data["document_type"])
+    if title in {str(data.get("work_id", "")), "工作记录标题"}:
+        raise SafetyError("work record H1 title must describe the work instead of repeating an ID or placeholder")
+
+    if document_type == "work_record":
+        block = summary_block(managed, "## 记录摘要")
+        if "time" in data:
+            time_line = f"- 工作时间：{display_record_time(str(data['time']))}"
+        else:
+            time_line = "- 工作时间：时刻未记录"
+        time_lines = [line for line in block if line.startswith("- 工作时间：")]
+        if time_lines != [time_line]:
+            raise SafetyError("AI-managed summary time does not match frontmatter")
+        required = {
+            f"- 文档类型：{DOCUMENT_TYPE_LABELS[document_type]}（{document_type}）",
+            f"- 工作类型：{WORK_TYPE_LABELS[str(data['work_type'])]}（{data['work_type']}）",
+            f"- 当前状态：{STATUS_LABELS[str(data['status'])]}（{data['status']}）",
+            f"- 工作日期：{data['date']}",
+            time_line,
+            f"- 创建时间：{display_timestamp(str(data['created_at']))}",
+            f"- 更新时间：{display_timestamp(str(data['updated_at']))}",
+        }
+    elif document_type == "daily_report":
+        block = summary_block(managed, "## 报告摘要")
+        required = {
+            f"- 文档类型：{DOCUMENT_TYPE_LABELS[document_type]}（{document_type}）",
+            f"- 报告日期：{data['date']}",
+            f"- 对应周次：{data['week_id']}",
+            f"- 生成时间：{display_timestamp(str(data['generated_at']))}",
+        }
+    else:
+        block = summary_block(managed, "## 报告摘要")
+        required = {
+            f"- 文档类型：{DOCUMENT_TYPE_LABELS[document_type]}（{document_type}）",
+            f"- 对应周次：{data['week_id']}",
+            f"- 报告周期：{data['period_start']} 至 {data['period_end']}",
+            f"- 生成时间：{display_timestamp(str(data['generated_at']))}",
+        }
+
+    missing = sorted(required - set(block))
+    if missing:
+        raise SafetyError("AI-managed summary is missing or inconsistent: " + "; ".join(missing))
+
+
 def validate_string_list(data: dict[str, object], key: str, item_validator=None) -> list[str]:
     value = data.get(key)
     if not isinstance(value, list) or not value or not all(isinstance(item, str) and item for item in value):
@@ -250,8 +348,9 @@ def validate_frontmatter(data: dict[str, object]) -> None:
     if expected is None:
         raise SafetyError(f"unsupported document_type: {document_type}")
     actual = set(data)
+    allowed = expected | OPTIONAL_FIELDS.get(document_type, set())
     missing = sorted(expected - actual)
-    unknown = sorted(actual - expected)
+    unknown = sorted(actual - allowed)
     if missing:
         raise SafetyError("missing required YAML properties: " + ", ".join(missing))
     if unknown:
@@ -260,13 +359,14 @@ def validate_frontmatter(data: dict[str, object]) -> None:
     if document_type == "work_record":
         validate_work_id(require_string(data, "work_id"))
         parse_date_value(require_string(data, "date"), "date")
-        time_value = require_string(data, "time")
-        if not TIME_RE.fullmatch(time_value):
-            raise SafetyError("time must use HH:MM:SS+08:00")
-        try:
-            datetime.strptime(time_value, "%H:%M:%S%z")
-        except ValueError as exc:
-            raise SafetyError("time must contain a valid clock time") from exc
+        if "time" in data:
+            time_value = require_string(data, "time")
+            if not TIME_RE.fullmatch(time_value):
+                raise SafetyError("time must use HH:MM:SS+08:00")
+            try:
+                datetime.strptime(time_value, "%H:%M:%S%z")
+            except ValueError as exc:
+                raise SafetyError("time must contain a valid clock time") from exc
         if require_string(data, "work_type") not in WORK_TYPES:
             raise SafetyError("work_type is not allowed")
         if require_string(data, "status") not in STATUSES:
@@ -565,6 +665,7 @@ def write_document(
     frontmatter = read_utf8_exact(frontmatter_file)
     managed = read_utf8_exact(managed_file)
     new_data = parse_frontmatter(frontmatter.strip("\r\n"))
+    validate_readable_managed_content(new_data, managed)
     validate_relationship_paths(root, new_data)
     validate_report_source_binding(
         root,
