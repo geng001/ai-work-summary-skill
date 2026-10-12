@@ -1,6 +1,6 @@
 interface:
   display_name: "AI 工作总结"
   short_description: "记录工作并生成可追溯的日报或周报"
-  default_prompt: "使用 $ai-work-summary-skill 记录当前任务，或根据明确授权的材料生成日报或周报。"
+  default_prompt: "使用 $ai-work-summary-skill 记录当前任务，补录当前可见会话中指定日期的工作记录，或根据明确授权的材料生成日报或周报。"
 policy:
   allow_implicit_invocation: false
