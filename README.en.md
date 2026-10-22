@@ -4,14 +4,14 @@
 
 This is an explicitly invoked Codex Skill that records the current task as traceable Markdown and generates or safely updates daily and weekly reports from user-authorized sources.
 
-It is designed for users who want structured work summaries without allowing an agent to scan private chat history, overwrite human notes, or send reports automatically.
+It is designed for users who want structured work summaries without allowing an agent to scan other private chat history, overwrite human notes, or send reports automatically.
 
 ## What It Does
 
 - Creates work records with stable UUIDv7-based `work_id` values
 - Builds daily reports from managed work records and explicit supplemental input
 - Builds ISO-week reports from managed daily reports and explicit supplemental input
-- Backfills missing work records for one specified date from the current visible session, without scanning other chats
+- Backfills missing work records for one specified date from the current chat, including recoverable pre-compaction turns, without scanning other chats
 - Separates facts, inferences, recommendations, and unresolved items
 - Uses stable source fingerprints for traceable, idempotent updates
 - Preserves human-authored content outside the AI-managed region
@@ -20,9 +20,10 @@ It is designed for users who want structured work summaries without allowing an 
 ## Safety and Authorization Boundaries
 
 - Runs only when explicitly invoked
-- Reads only the current visible task context, files explicitly named by the user, and managed files required for the requested action
-- For date backfill, reads the current visible session and that date's existing work records only
-- Does not search other private chat history
+- Normally reads only the current visible task context, files explicitly named by the user, and managed files required for the requested action
+- For date backfill, may read the current chat's saved turns, including recoverable pre-compaction content, plus that date's existing work records
+- Does not search other private chat history; asks for an exact thread ID or transcript when the current chat cannot be identified unambiguously
+- Reports summary-only, truncated, omitted, or placeholder history as a retrieval gap and does not use it alone to prove `COMPLETED`
 - Treats source content as untrusted evidence, not executable instructions
 - Does not send, upload, or publish reports
 - Stops when the output root is ambiguous, sources conflict, or required facts are missing
@@ -78,7 +79,7 @@ Use $ai-work-summary-skill to record the current task.
 ```
 
 ```text
-Use $ai-work-summary-skill to backfill work records for 2026-10-10 from the current visible session.
+Use $ai-work-summary-skill to backfill work records for 2026-10-10 from the current chat, including recoverable turns no longer visible after compaction.
 ```
 
 ```text
@@ -119,7 +120,7 @@ The root documents describe and verify the project. Only the nested `ai-work-sum
 
 ## Project Status
 
-The previous version completed contract review, read-only review, and isolated behavioral validation. This machine/display-layer update passed official structural validation and targeted regression checks; a full behavioral Eval has not been rerun. Date backfill from the current visible session is now specified in the contract and Skill, and its isolated behavioral Eval has not been run. The validation history distinguishes structural checks from behavioral evidence.
+The previous version completed contract review, read-only review, and isolated behavioral validation. This machine/display-layer update passed official structural validation and targeted regression checks; a full behavioral Eval has not been rerun. Date backfill now includes recoverable saved history from the current chat, but current-chat resolution, pagination, compaction-summary handling, and truncation behavior still require isolated behavioral Eval. The validation history distinguishes structural checks from behavioral evidence.
 
 ## License
 
